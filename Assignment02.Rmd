@@ -1,0 +1,382 @@
+---
+title: "Assignment 02"
+author: "Jawad Adil - 3049429"
+date: "5/13/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(error = TRUE)
+library(caret)
+library("neuralnet")
+```
+
+# Gathering Data from CSV file and making sure it is in correct form
+```{r cache=TRUE}
+set.seed(1)
+# read the data from CSV
+DiamondData <- read.csv("C:/Users/jawad adil/Downloads/DiamondDataComplete.csv")
+
+# create a separate sample of 10000 values
+# s <- sample(nrow(DiamondData), size=15000, replace = FALSE, prob = NULL)
+# s <- DiamondData[s, ]
+s <- DiamondData
+
+# remove if there's any NA value
+s<-na.omit(s)
+
+# replace Very Geod with very Good
+s$cut[s$cut == "Very Geod"] <-"Very Good"
+
+# replace higher carat values and make them in range
+s$carat<-replace(s$carat,s$carat>5.01,5.01)
+```
+\newpage
+
+## Task A: Hypothesis testing
+### Hypothesis 1: Is Diamond price depends upon Diamond table?
+
+```{r cache=TRUE}
+set.seed(2)
+# first plot the graph between price and table
+plot(s$price,s$table,xlab = "Price",ylab = "Table",
+     main = "Price vs Table distribution",pch=20,col="#3299a8")
+# regression line
+abline(lm(s$price~s$table),col="#9c32a8",lwd="3")
+# printing grid behind 
+grid(col = "black")
+```
+
+### H0: Diamond Price is independent of Table attribute of Diamonds
+### H1: Diamond Price is dependent of Table attribute of Diamonds
+
+### Level of Significance: alpha = 0.05
+
+### Decision rule: 
+If p.value is less than the level of significance 0.05 then reject H0 or null hypothesis
+
+### Now check for T-Test between price and table attributes
+
+```{r cache=TRUE}
+set.seed(3)
+# calculate T-Test between price and table
+t.test(s$price,s$table)
+```
+
+
+### Results:
+Since, p.value is less than the 0.05 So, we reject H0. We can conclude that the price of Diamond is not independent of table. It means our hypothesis was false.
+
+### Hence, the Price and table for diamond are dependent variables.
+
+\newpage
+
+### Hypothesis 2: Is the price for Diamonds with clarity VVs1 and IF same?
+
+```{r cache=TRUE}
+set.seed(4)
+# separate the diamonds that has clarity = VVS1
+VVS1 <- s[which(s$clarity=='VVS1'), ] 
+
+# separate the diamonds that has clarity = IF
+IF <- s[which(s$clarity=='IF'), ]
+
+# calculating mean prices
+priceV <- mean(VVS1$price)
+priceI <- mean(IF$price)
+
+# calculating standard deviations
+sdV <- sd(VVS1$price)
+sdI <- sd(IF$price)
+
+# create vectors for plot
+price_values <- c(priceV,priceI)
+sd_values <- c(sdV,sdI)
+
+# set 1:2 for plotting side by side
+par(mfrow=c(1,2))
+
+# plot price
+barplot <- barplot(price_values,col=rainbow(2),ylab = "Mean price",main="Price")
+
+# plot standard deviation
+barplot <- barplot(sd_values,col=rainbow(2),ylab = "Deviation",
+                   main="Standard Deviation")
+
+```
+
+### H0: There is no difference between mean price for diamonds with clarity = VVS1 and clarity = IF.
+### H1: There is a difference between mean price for diamonds with clarity = VVS1 and clarity = IF.
+
+### Level of Significance: alpha = 0.05
+
+### Decision rule: 
+If p.value is less than the level of significance 0.05 then reject H0 or null hypothesis
+
+### Apply test on the values to check P-value
+```{r cache=TRUE}
+set.seed(5)
+# apply t.test() function to check p-value
+test <- t.test(IF$price, VVS1$price)
+test
+```
+### Results:
+Since, p.value is `r test$p.value` which is less than the 0.05 So, we reject H0.
+
+### Hence, the mean prices for diamonds with clarity VVS1 and IF are different. Mean price for diamonds with clarity VVS1 is `r priceV` having standard daviation `r sdV` and the mean price for diamonds with clarity IF is `r priceI` having standard daviation `r sdI`.
+
+
+\newpage
+# Task B: Regression and prediction
+### 1: Divide the data into training and test data 75% and 25%
+```{r cache=TRUE}
+# Get the count of 75% rows from training data
+training_data_range <- sample(nrow(s), size= floor(.75*nrow(s)), replace = FALSE, prob = NULL)
+#s<-as.factor(s)
+# Get the 1st 75% rows for training data
+training_data <- s[training_data_range, ]
+
+# Get the last 25% rows for testing data
+testing_data <- s[-training_data_range, ]
+
+# To confirm we have correctly separated data
+# check if the starting values are same or not
+head(training_data)
+
+# similarly check the starting 6 values of testing data as well
+head(testing_data)
+```
+
+Data in both sets are different, Hence we can confirm that data is correctly splitted.
+
+```{r cache=TRUE}
+# total number of rows
+nrow(s)
+
+# check the number of rows in training data
+nrow(training_data)
+
+#check the number of rows in testing data
+nrow(testing_data)
+```
+
+This also indicates that our data is correctly separated.
+
+### Now Create a linear model and test it using prediction function
+
+```{r cache=TRUE}
+
+set.seed(6)
+
+# create a linear model
+linear_model <- lm(price~.,data=training_data)
+
+# check the cofficients of linear model
+coef(linear_model)
+
+# predict the prices for testing data
+prediction <- predict(linear_model,testing_data)
+
+# find correlation between prediction and prices
+correlation <- cor(prediction,testing_data$price)
+correlation
+
+# find cor squared which is equal to R^2
+r_squared <- cor(prediction,testing_data$price)^2
+r_squared
+
+
+# find adjusted r square using summary function
+adjusted_r_squared <- summary(linear_model)$adj.r.squared
+adjusted_r_squared
+
+# find the RMSE using caret library function to verify
+rmse <- RMSE(testing_data$price,prediction)
+rmse
+```
+
+### Now normalize the data and check the linear regression again
+```{r cache=TRUE}
+# set random seed
+set.seed(7)
+# function to normalize the values
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+#create a copy to normalize the data, actual dataset will be preserved
+s1<-s
+s1$cut <- as.numeric(as.factor(s1$cut))
+s1$clarity <- as.numeric(as.factor(s1$clarity))
+s1$color <- as.numeric(as.factor(s1$color))
+
+# normalize the data
+s1 <- as.data.frame(lapply(s1, normalize))
+
+#defining range of training data
+normalized_training_data_range <- sample(nrow(s1), size= floor(.75*nrow(s)), replace = FALSE,
+                                         prob = NULL)
+
+# Get the 1st 75% rows for training data
+normalized_training_data <- s1[normalized_training_data_range, ]
+
+# Get the last 25% rows for testing data
+normalized_testing_data <- s1[-normalized_training_data_range, ]
+
+# create linear model for normalized data
+normalized_linear_model <- lm(price~.,data=normalized_training_data)
+
+# check the coefficients of linear model
+coef(normalized_linear_model)
+
+# predict the prices for testing data
+normalized_prediction <- predict(normalized_linear_model,normalized_testing_data)
+
+# find correlation between prediction and prices
+normalized_correlation <- cor(normalized_prediction,normalized_testing_data$price)
+normalized_correlation
+
+# find cor squared which is equal to R^2
+normalized_r_square<- cor(normalized_prediction,normalized_testing_data$price)^2
+normalized_r_square
+
+# find adjusted r square using summary function
+normalized_adjusted_r_squared<- summary(normalized_linear_model)$adj.r.squared
+normalized_adjusted_r_squared
+
+# find the RMSE using caret library function to verify
+normalized_rmse <- RMSE(normalized_testing_data$price,normalized_prediction)
+normalized_rmse
+
+
+```
+
+## Conclusion:
+### we can compare our results by comparing them side by side.
+                            Simple Data           Normalized Data
+Correlation: =========== `r correlation` ========= `r normalized_correlation`
+
+R-Squared: ============`r r_squared` ========= `r normalized_r_square`
+
+Adjusted-R-Squared: =======`r adjusted_r_squared` ========= `r normalized_adjusted_r_squared`
+
+Root mean square error: ====`r rmse` ======= `r normalized_rmse`
+
+So the better performance achieved is : `r max(rmse,normalized_rmse)`
+
+```{r cache=TRUE}
+# getting 10000 samples because below algorithm takes more time to compute
+s <- sample(nrow(DiamondData), size=10000, replace = FALSE, prob = NULL)
+s <- DiamondData[s, ]
+
+```
+
+\newpage
+## Task C: Classifications and prediction
+
+```{r cache=TRUE}
+# set random seed value
+set.seed(8)
+
+# splitting 80/20% training a testing data
+trainingInd <- createDataPartition(s$cut, p= 0.8, list = F)
+training_data <- s[trainingInd,]
+test_data <- s[-trainingInd,]
+
+# setting control parameters for training
+trainctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+
+# training kNN model
+knn_fit <- train(cut ~., data = training_data, method = "knn",trControl = trainctrl,tuneLength = 10)
+
+# predicting the cut classes
+knnPredict <- predict(knn_fit, newdata = test_data )
+
+# confusion matrix to find accuracy and other related stuff
+knn_con <- confusionMatrix(knnPredict, as.factor(test_data$cut))
+knn_con
+knn_accuracy <- knn_con$overall['Accuracy']
+knn_accuracy
+
+```
+
+```{r cache=TRUE}
+# set random seed
+set.seed(9)
+
+# split training and testing data with ratio 80/20 %
+trainingInd <- createDataPartition(s$cut, p= 0.8, list = F)
+training_data <- s[trainingInd,]
+test_data <- s[-trainingInd,]
+
+# train using C5.0 trees methods 
+C5_fit <- train(cut~., data = training_data, method = "C5.0")
+
+# predicting cut classes using the C5 fit
+C5_predict <- predict(C5_fit, newdata= test_data )
+
+# calculating confusion matrix to get the accuracy and stuff
+c5_con <- confusionMatrix(C5_predict, as.factor(test_data$cut))
+c5_con
+c5_accuracy <- c5_con$overall['Accuracy']
+c5_accuracy
+
+```
+
+
+```{r message=TRUE, warning=TRUE, cache=TRUE}
+# setting random seed
+set.seed(10)
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+# converting strings to numeric values in the dataset
+s$cut <- as.numeric(as.factor(s$cut))
+s$clarity <- as.numeric(as.factor(s$clarity))
+s$color <- as.numeric(as.factor(s$color))
+
+# normalize the data
+s <- as.data.frame(lapply(s, normalize))
+
+# split the data into 80/20 training and testing+ data
+trainingInd <- createDataPartition(s$cut, p= 0.8, list = F)
+training_data <- s[trainingInd,]
+test_data <- s[-trainingInd,]
+
+# using neuralnet function to create ANN fit
+ANN_fit <- neuralnet(cut~., data = training_data, hidden = 5,stepmax=1e7)
+
+# ploting the neural network nodes with weights
+plot(ANN_fit,rep = "best")
+
+# Computing results with all columns other than cuts
+ANN_results <- compute(ANN_fit, test_data[,-2])
+
+# getting prediction
+predicted_strength <- ANN_results$net.result
+
+# finding correlation
+ANN_accuracy <- cor(predicted_strength, test_data$cut)
+ANN_accuracy
+
+
+```
+
+## Accuracy of all of the above methods is given below
+KNN: `r knn_accuracy`
+
+C5.0: `r c5_accuracy`
+
+ANN: `r ANN_accuracy`
+
+# So, The Maximum Accuracy achieved from above 3 models is: `r max(knn_accuracy,max(c5_accuracy,ANN_accuracy))`.
+
+
